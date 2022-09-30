@@ -19,6 +19,7 @@
 #define AD7779_DISABLE_SAR	0x09
 #define AD7779_PDB_SAR		0x2C
 #define AD7779_PDB_SAR_OFF	0x24
+#define AD7779_ENABLE_SD	0x90
 
 #define AD7779_REG_CH_CONFIG(ch)		(0x00 + (ch))		// Channel Configuration
 #define AD7779_REG_GENERAL_USER_CONFIG_1	0x11			// General User Config 1
@@ -161,6 +162,42 @@ static int ad7779_spi_sar_readback(struct iio_dev *indio_dev, int *readback) {
 	return ret;
 }
 
+static int ad7779_data_read_en(struct iio_dev *indio_dev) {
+	int ret;
+
+	ret = ad7779_spi_write(indio_dev,
+				AD7779_REG_GENERAL_USER_CONFIG_3,
+				AD7779_ENABLE_SD);
+
+	return ret;
+}
+
+static int ad7779_sigma_delta_data(struct iio_dev *indio_dev) {
+	int ret;
+	struct ad7779_state *spi_st = iio_priv(indio_dev);
+	int length = 2;
+	// u8 tbuf[8] = { 0x80 };
+	// u8 rbuf[8];
+	struct spi_transfer sd_readback_tr[] = {
+		{
+			.rx_buf = spi_st->reg_rx_buf,
+			.tx_buf = spi_st->reg_tx_buf,
+			.len = 3,
+		}
+	};
+
+	spi_st->reg_tx_buf[0] = AD7779_SPI_READ_CMD;
+	spi_st->reg_tx_buf[1] = 0;
+	spi_st->reg_tx_buf[2] = 0;
+
+	ret = spi_sync_transfer(spi_st->spi, sd_readback_tr,
+				ARRAY_SIZE(sd_readback_tr));
+
+	dev_info(&spi_st->spi->dev, "The data gathered is %x %x %x ", spi_st->reg_rx_buf[0], spi_st->reg_rx_buf[1], spi_st->reg_rx_buf[2]);
+
+	return ret;
+}
+
 static int ad7779_read_raw(struct iio_dev *indio_dev,
 			struct iio_chan_spec const *chan,
 			int *val,
@@ -173,9 +210,10 @@ static int ad7779_read_raw(struct iio_dev *indio_dev,
 
 	switch(mask) {
 	case IIO_CHAN_INFO_RAW:
-		ret = ad7779_spi_read(indio_dev, &temp,
-					AD7779_REG_CH_CONFIG(chan->channel));
+		// ret = ad7779_spi_read(indio_dev, &temp,
+		// 			AD7779_REG_CH_CONFIG(chan->channel));
 		// ret = ad7779_spi_sar_diagnostic(indio_dev, &data);
+		ret = ad7779_sigma_delta_data(indio_dev);
 		if(ret)
 			return ret;
 		*val = temp;
@@ -306,10 +344,13 @@ static int ad7779_probe(struct spi_device *spi) {
 	crc8_populate_msb(ad7779_crc8_table, AD7779_CRC8_POLY);
 
 	/* write 0x3F to REG_GEN_ERR_1 to enable crc */
+	ad7779_st->crc_enabled = true;
 	ad7779_spi_write(indio_dev,
 			AD7779_REG_GEN_ERR_REG_1_EN,
-			AD7779_ENABLE_CRC);
-	ad7779_st->crc_enabled = true;
+			0x3E);
+	ad7779_st->crc_enabled = false;
+
+	ad7779_data_read_en(indio_dev);
 
 	// ad7779_spi_sar_diagnostic(indio_dev, &rbuf);
 	// dev_info(&spi->dev, "The data readback is %d", rbuf);
