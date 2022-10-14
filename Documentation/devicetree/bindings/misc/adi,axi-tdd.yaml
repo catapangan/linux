@@ -5,10 +5,10 @@
 $id: http://devicetree.org/schemas/trivial-devices.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: ADI AXI TDD NG Core
+title: ADI AXI TDD Core
 
 description: |
-  Bindings for the new generic TDD NG CORE which is used in the ADI HDL reference designs
+  Bindings for the new generic TDD CORE which is used in the ADI HDL reference designs
 
 maintainers:
   - David Winter <david.winter@analog.com>
@@ -17,7 +17,7 @@ properties:
   compatible:
     items:
       - enum:
-          - adi,axi-tdd-ng-1.00.a
+          - adi,axi-tdd-1.00.a
 
   reg:
     maxItems: 1
