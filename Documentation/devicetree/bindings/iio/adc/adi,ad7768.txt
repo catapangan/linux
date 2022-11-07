@@ -9,6 +9,7 @@ Required properties:
 	- vref-supply: phandle to the regulator for ADC reference voltage.
 	- clocks: phandle to the master clock (mclk).
 	- clock-names: Must be "mclk".
+	- adi,data-lines: Must be 1/2/8 for AD7768 or 1/4 for AD7768-4 ADC.
 
 Optional properties:
 
@@ -29,4 +30,6 @@ ad7768: adc@0 {
 	clocks = <&adc_clk>;
 	clock-names = "mclk";
 	reset-gpio = <&gpio0 1 GPIO_ACTIVE_LOW>;
+
+	adi,data-lines = <1>
 };
