@@ -6,6 +6,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
 #include <linux/dma-mapping.h>
@@ -642,6 +643,7 @@ static int ad7768_register(struct ad7768_state *st, struct iio_dev *indio_dev)
 
 static int ad7768_probe(struct spi_device *spi)
 {
+	struct gpio_desc *gpio_reset;
 	struct ad7768_state *st;
 	struct iio_dev *indio_dev;
 	int max_samp_freq;
@@ -675,6 +677,17 @@ static int ad7768_probe(struct spi_device *spi)
 		return ret;
 
 	st->spi = spi;
+
+	/* get out of reset state */
+	gpio_reset = devm_gpiod_get_optional(&spi->dev, "reset-n",
+						   GPIOD_OUT_HIGH);
+	if (IS_ERR(gpio_reset))
+		return dev_err_probe(&spi->dev, PTR_ERR(gpio_reset),
+				     "failed to get the gpio reset\n");
+	if (gpio_reset) {
+		usleep_range(1580, 1660);
+		gpiod_set_value_cansleep(gpio_reset, 0);
+	}
 
 	ret = of_property_read_u32(st->spi->dev.of_node, "adi,data-lines",
 				  &st->datalines);
