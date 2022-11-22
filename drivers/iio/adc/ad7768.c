@@ -51,9 +51,11 @@
 
 /* AD7768_INTERFACE_CFG */
 #define AD7768_INTERFACE_CFG_DCLK_DIV_MSK	GENMASK(1, 0)
-#define AD7768_INTERFACE_CFG_DCLK_DIV_MODE(x)	(((x) & 0x3) << 0)
+#define AD7768_INTERFACE_CFG_DCLK_DIV_MODE(x)	(((3 - ilog2(x)) & 0x3) << 0)
+#define AD7768_MAX_DCLK_DIV			8
 
-#define AD7768_MAX_SAMP_FREQ	256000
+#define AD7768_MAX_SAMP_FREQ_MLINES    256000
+#define AD7768_MAX_SAMP_FREQ_1LINE     128000
 #define AD7768_WR_FLAG_MSK(x)	(0x80 | ((x) & 0x7F))
 
 #define AD7768_OUTPUT_MODE_TWOS_COMPLEMENT	0x01
@@ -62,6 +64,8 @@
 #define AD7768_MAX_RATE				(AD7768_CONFIGS_PER_MODE - 1)
 #define AD7768_MIN_RATE				0
 
+#define SAMPLE_SIZE				32
+#define NUM_CHANNELS				8
 enum ad7768_power_modes {
 	AD7768_LOW_POWER_MODE,
 	AD7768_MEDIAN_MODE = 2,
@@ -73,6 +77,7 @@ struct ad7768_state {
 	struct mutex lock;
 	struct regulator *vref;
 	struct clk *mclk;
+	unsigned int datalines;
 	unsigned int sampling_freq;
 	enum ad7768_power_modes power_mode;
 	__be16 d16;
@@ -361,12 +366,22 @@ static int ad7768_set_sampling_freq(struct iio_dev *dev,
 				    unsigned int freq)
 {
 	struct ad7768_state *st = ad7768_get_data(dev);
+	unsigned int chan_per_doutx;
+	unsigned int mclk, dclk;
 	int power_mode = -1;
 	unsigned int i, j;
 	int ret = 0;
 
 	if (!freq)
 		return -EINVAL;
+
+	/* Check if the number of data lines supports the current sampling rate */
+	mclk = clk_get_rate(st->mclk);
+	chan_per_doutx = NUM_CHANNELS / st->datalines;
+	dclk = freq * SAMPLE_SIZE * chan_per_doutx;
+
+	if (dclk > mclk)
+		goto freq_err;
 
 	mutex_lock(&st->lock);
 
@@ -406,10 +421,15 @@ static ssize_t ad7768_attr_sampl_freq_avail(struct device *dev,
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ad7768_state *st;
-	int i, len = 0;
+	int i, len = 0, size;
 
 	st = ad7768_get_data(indio_dev);
-	for (i = 0; i < ARRAY_SIZE(ad7768_sampl_freq_avail); i++)
+	size = ARRAY_SIZE(ad7768_sampl_freq_avail);
+
+	if (st->datalines == 1)
+		size--;
+
+	for (i = 0; i < size; i++)
 		len += scnprintf(buf + len, PAGE_SIZE - len, "%d ",
 			ad7768_sampl_freq_avail[i]);
 	buf[len - 1] = '\n';
@@ -562,6 +582,18 @@ static void ad7768_clk_disable(void *data)
 	clk_disable_unprepare(clk);
 }
 
+static int ad7768_post_setup(struct iio_dev *indio_dev)
+{
+
+	struct axiadc_state *axiadc_st = iio_priv(indio_dev);
+	struct axiadc_converter *conv = iio_device_get_drvdata(indio_dev);
+	struct ad7768_state *st = conv->phy;
+
+	axiadc_write(axiadc_st, ADI_REG_CNTRL, ADI_NUM_LANES(st->datalines));
+
+	return 0;
+}
+
 static int ad7768_register_axi_adc(struct ad7768_state *st)
 {
 	struct axiadc_converter	*conv;
@@ -577,6 +609,7 @@ static int ad7768_register_axi_adc(struct ad7768_state *st)
 	conv->reg_access = &ad7768_reg_access;
 	conv->write_raw = &ad7768_write_raw;
 	conv->read_raw = &ad7768_read_raw;
+	conv->post_setup = &ad7768_post_setup;
 	conv->attrs = &ad7768_group;
 	conv->phy = st;
 	/* Without this, the axi_adc won't find the converter data */
@@ -611,6 +644,7 @@ static int ad7768_probe(struct spi_device *spi)
 {
 	struct ad7768_state *st;
 	struct iio_dev *indio_dev;
+	int max_samp_freq;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
@@ -642,7 +676,19 @@ static int ad7768_probe(struct spi_device *spi)
 
 	st->spi = spi;
 
-	ret = ad7768_set_sampling_freq(indio_dev, AD7768_MAX_SAMP_FREQ);
+	ret = of_property_read_u32(st->spi->dev.of_node, "adi,data-lines",
+				  &st->datalines);
+	if (ret < 0)
+		return ret;
+	if (!st->datalines)
+		return -EINVAL;
+
+	if (st->datalines == 1)
+		max_samp_freq = AD7768_MAX_SAMP_FREQ_1LINE;
+	else
+		max_samp_freq = AD7768_MAX_SAMP_FREQ_MLINES;
+
+	ret = ad7768_set_sampling_freq(indio_dev, max_samp_freq);
 	if (ret < 0)
 		return ret;
 
