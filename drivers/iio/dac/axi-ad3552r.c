@@ -87,10 +87,13 @@ static int axi_ad3552r_read_raw(struct iio_dev *indio_dev,
 		*val = priv->enable;
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_RAW:
-		if (chan->channel)
-			*val = 1;
-		else
-			*val = 0;
+		if (chan->channel){
+			axi_ad3552r_spi_write_16b(priv, 0xac, 0x00, 1);
+			*val = axi_ad3552r_read(priv,0x84);
+		} else {
+			axi_ad3552r_spi_write_16b(priv, 0xaa, 0x00, 1);
+			*val = axi_ad3552r_read(priv,0x84);
+		}
 		return IIO_VAL_INT;
 	}
 
@@ -108,6 +111,11 @@ static int axi_ad3552r_write_raw(struct iio_dev *indio_dev,
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		return 0;
+	case IIO_CHAN_INFO_RAW:
+		if (chan->channel)
+			axi_ad3552r_spi_write_16b(priv, 0x2c, (u32)val , 1);
+		else
+			axi_ad3552r_spi_write_16b(priv, 0x2a, (u32)val , 1);
 	}
 
 	return -EINVAL;
