@@ -10,6 +10,11 @@ Required properties:
 	- clocks: phandle to the master clock (mclk).
 	- clock-names: Must be "mclk".
 
+Optional properties:
+
+ - reset-gpio: 	a GPIO spec to define which pin is connected to the chip's
+		!RESET pin. Active Low.
+
 Example:
 
 ad7768: adc@0 {
@@ -23,4 +28,5 @@ ad7768: adc@0 {
 	vref-supply = <&vref>;
 	clocks = <&adc_clk>;
 	clock-names = "mclk";
+	reset-gpio = <&gpio0 1 GPIO_ACTIVE_LOW>;
 };
