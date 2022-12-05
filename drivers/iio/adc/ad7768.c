@@ -55,6 +55,10 @@
 #define AD7768_INTERFACE_CFG_DCLK_DIV_MODE(x)	(((3 - ilog2(x)) & 0x3) << 0)
 #define AD7768_MAX_DCLK_DIV			8
 
+#define AD7768_INTERFACE_CFG_CRC_SELECT_MSK	GENMASK(3, 2)
+/* only 4 samples CRC calculation support exists */
+#define AD7768_INTERFACE_CFG_CRC_SELECT		0x01
+
 #define AD7768_MAX_SAMP_FREQ_MLINES    256000
 #define AD7768_MAX_SAMP_FREQ_1LINE     128000
 #define AD7768_WR_FLAG_MSK(x)	(0x80 | ((x) & 0x7F))
@@ -597,6 +601,7 @@ static int ad7768_post_setup(struct iio_dev *indio_dev)
 	struct axiadc_converter *conv = iio_device_get_drvdata(indio_dev);
 	struct ad7768_state *st = conv->phy;
 
+	axiadc_write(axiadc_st, ADI_REG_CNTRL_3, ADI_CRC_EN(1));
 	axiadc_write(axiadc_st, ADI_REG_CNTRL, ADI_NUM_LANES(st->datalines));
 
 	return 0;
@@ -709,6 +714,12 @@ static int ad7768_probe(struct spi_device *spi)
 		max_samp_freq = AD7768_MAX_SAMP_FREQ_MLINES;
 
 	ret = ad7768_set_sampling_freq(indio_dev, max_samp_freq);
+	if (ret < 0)
+		return ret;
+
+	ret =  ad7768_spi_write_mask(st, AD7768_INTERFACE_CFG,
+				     AD7768_INTERFACE_CFG_CRC_SELECT_MSK,
+				     AD7768_INTERFACE_CFG_CRC_SELECT);
 	if (ret < 0)
 		return ret;
 
