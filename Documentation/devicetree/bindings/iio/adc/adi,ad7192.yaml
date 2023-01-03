@@ -21,6 +21,7 @@ properties:
       - adi,ad7190
       - adi,ad7192
       - adi,ad7193
+      - adi,ad7194
       - adi,ad7195
 
   reg:
@@ -83,6 +84,29 @@ properties:
     description: see Documentation/devicetree/bindings/iio/adc/adc.txt
     type: boolean
 
+  adi,channels:
+    description: |
+      List of external channels connected to the ADC for AD7194 only.
+
+patternProperties:
+  '^channel@[0-9a-f]+,[0-9a-f]+$':
+    description: |
+      Definition for a channel provided via 'adi,channels'
+    properties:
+      '#address-cells':
+        const: 2
+      '#size-cells':
+        const: 0
+      reg:
+        maxItems: 1
+        description: |
+          Pins the channel is connected to. The first value specifies the
+          the positive input pin, the second value the negative input.
+    required:
+      - '#address-cells'
+      - '#size-cells'
+      - reg
+
 required:
   - compatible
   - reg
@@ -119,5 +143,35 @@ examples:
         adi,rejection-60-Hz-enable;
         adi,buffer-enable;
         adi,burnout-currents-enable;
-        };
+      };
+    };
+  - |
+    spi0 {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      adc@0 {
+        compatible = "adi,ad7194";
+        reg = <0>;
+        spi-max-frequency = <1000000>;
+        spi-cpol;
+        spi-cpha;
+        interrupts = <25 0x2>;
+        interrupt-parent = <&gpio>;
+        dvdd-supply = <&dvdd>;
+        avdd-supply = <&avdd>;
+
+        adi,channels {
+                #address-cells = <2>;
+                #size-cells = <0>;
+                channel@0,1 {
+                    reg = <0 1>;
+                    adi,bipolar;
+                };
+                channel@2,3 {
+                    reg = <2 3>;
+                    adi,bipolar;
+                };
+        };  
+      };
     };
