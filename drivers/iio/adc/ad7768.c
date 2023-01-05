@@ -66,7 +66,6 @@
 #define AD7768_NUM_CONFIGS			0x04
 
 #define SAMPLE_SIZE				32
-#define NUM_CHANNELS				8
 
 #define DEC_32			32
 #define DEC_1024		1024
@@ -92,11 +91,13 @@ struct ad7768_state {
 	unsigned int sampling_freq;
 	enum ad7768_power_modes power_mode;
 	struct ad7768_power_mode_info power_modes_info[AD7768_NUM_CONFIGS];
+	const struct axiadc_chip_info *chip_info;
 	__be16 d16;
 };
 
 enum ad7768_device_ids {
-	ID_AD7768
+	ID_AD7768,
+	ID_AD7768_4
 };
 
 static const int ad7768_dec_rate[6] = {
@@ -224,7 +225,7 @@ static int ad7768_set_clk_divs(struct ad7768_state *st,
 	int ret = 0;
 
 	mclk = clk_get_rate(st->mclk);
-	chan_per_doutx = NUM_CHANNELS / st->datalines;
+	chan_per_doutx = st->chip_info->num_channels / st->datalines;
 
 	for (dec = 0; dec < ARRAY_SIZE(ad7768_dec_rate); dec++) {
 		div = mclk_div * ad7768_dec_rate[dec];
@@ -404,7 +405,7 @@ static int ad7768_set_sampling_freq(struct iio_dev *dev,
 
 	/* Check if the number of data lines supports the current sampling rate */
 	mclk = clk_get_rate(st->mclk);
-	chan_per_doutx = NUM_CHANNELS / st->datalines;
+	chan_per_doutx = st->chip_info->num_channels / st->datalines;
 	dclk = freq * SAMPLE_SIZE * chan_per_doutx;
 
 	if (dclk > mclk)
@@ -422,7 +423,7 @@ static int ad7768_set_sampling_freq(struct iio_dev *dev,
 			    freq <= st->power_modes_info[mode].max_freq){
 				power_mode = mode;
 				break;
-			}
+		}
 	} else {
 		power_mode = st->power_mode;
 	}
@@ -590,32 +591,29 @@ static const struct iio_info ad7768_info = {
 		},							\
 	}
 
-#define DECLARE_AD7768_CHANNELS(name)	\
-static struct iio_chan_spec name[] = {	\
-		AD7768_CHAN(0), \
-		AD7768_CHAN(1), \
-		AD7768_CHAN(2), \
-		AD7768_CHAN(3), \
-		AD7768_CHAN(4), \
-		AD7768_CHAN(5), \
-		AD7768_CHAN(6), \
-		AD7768_CHAN(7), \
-}
-
-DECLARE_AD7768_CHANNELS(ad7768_channels);
-
-static const struct axiadc_chip_info conv_chip_info = {
-	.name = "ad7768_axi_adc",
-	.max_rate = 256000000UL,
-	.num_channels = 8,
-	.channel[0] = AD7768_CHAN(0),
-	.channel[1] = AD7768_CHAN(1),
-	.channel[2] = AD7768_CHAN(2),
-	.channel[3] = AD7768_CHAN(3),
-	.channel[4] = AD7768_CHAN(4),
-	.channel[5] = AD7768_CHAN(5),
-	.channel[6] = AD7768_CHAN(6),
-	.channel[7] = AD7768_CHAN(7),
+static const struct axiadc_chip_info conv_chip_info_tbl[] = {
+	[ID_AD7768] = {
+			.id = ID_AD7768,
+			.name = "ad7768_axi_adc",
+			.num_channels = 8,
+			.channel[0] = AD7768_CHAN(0),
+			.channel[1] = AD7768_CHAN(1),
+			.channel[2] = AD7768_CHAN(2),
+			.channel[3] = AD7768_CHAN(3),
+			.channel[4] = AD7768_CHAN(4),
+			.channel[5] = AD7768_CHAN(5),
+			.channel[6] = AD7768_CHAN(6),
+			.channel[7] = AD7768_CHAN(7),
+		},
+	[ID_AD7768_4] = {
+			.id = ID_AD7768_4,
+			.name = "ad7768_4_axi_adc",
+			.num_channels = 4,
+			.channel[0] = AD7768_CHAN(0),
+			.channel[1] = AD7768_CHAN(1),
+			.channel[2] = AD7768_CHAN(2),
+			.channel[3] = AD7768_CHAN(3),
+	}
 };
 
 static const unsigned long ad7768_available_scan_masks[]  = { 0xFF, 0x00 };
@@ -670,7 +668,7 @@ static int ad7768_register_axi_adc(struct ad7768_state *st)
 
 	conv->spi = st->spi;
 	conv->clk = st->mclk;
-	conv->chip_info = &conv_chip_info;
+	conv->chip_info = st->chip_info;
 	conv->adc_output_mode = AD7768_OUTPUT_MODE_TWOS_COMPLEMENT;
 	conv->reg_access = &ad7768_reg_access;
 	conv->write_raw = &ad7768_write_raw;
@@ -691,8 +689,8 @@ static int ad7768_register(struct ad7768_state *st, struct iio_dev *indio_dev)
 	indio_dev->dev.parent = &st->spi->dev;
 	indio_dev->name = "ad7768";
 	indio_dev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_HARDWARE;
-	indio_dev->channels = ad7768_channels;
-	indio_dev->num_channels = ARRAY_SIZE(ad7768_channels);
+	indio_dev->channels = st->chip_info->channel;
+	indio_dev->num_channels = st->chip_info->num_channels;
 	indio_dev->info = &ad7768_info;
 	indio_dev->available_scan_masks = ad7768_available_scan_masks;
 
@@ -713,12 +711,23 @@ static int ad7768_probe(struct spi_device *spi)
 	struct iio_dev *indio_dev;
 	int max_samp_freq;
 	int ret;
+	int id;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
 	if (!indio_dev)
 		return -ENOMEM;
 
 	st = iio_priv(indio_dev);
+
+	st->chip_info = device_get_match_data(&spi->dev);
+	if (!st->chip_info) {
+		st->chip_info = (void *)spi_get_device_id(spi)->driver_data;
+
+		if (!st->chip_info)
+			return -EINVAL;
+	}
+
+	id = st->chip_info->id;
 
 	st->vref = devm_regulator_get(&spi->dev, "vref");
 	if (IS_ERR(st->vref))
@@ -794,13 +803,22 @@ static int ad7768_probe(struct spi_device *spi)
 
 static const struct spi_device_id ad7768_id[] = {
 	{"ad7768", ID_AD7768},
+	{"ad7768-4", ID_AD7768_4},
 	{}
 };
 MODULE_DEVICE_TABLE(spi, ad7768_id);
 
+static const struct of_device_id ad7768_of_match[]  = {
+	{ .compatible = "adi,ad7768", .data = &conv_chip_info_tbl[ID_AD7768]},
+	{ .compatible = "adi,ad7768-4", .data = &conv_chip_info_tbl[ID_AD7768_4]},
+	{},
+};
+MODULE_DEVICE_TABLE(of, ad7768_of_match);
+
 static struct spi_driver ad7768_driver = {
 	.driver = {
 		.name	= "ad7768",
+		.of_match_table = ad7768_of_match,
 	},
 	.probe		= ad7768_probe,
 	.id_table	= ad7768_id,
