@@ -26,7 +26,7 @@ struct axi_ad3552r_priv {
 };
 
 void axi_ad3552r_write(struct axi_ad3552r_priv *priv, u32 reg, u32 val)
-{
+{   pr_err("%s: 0x%x = 0x%x\n", __FUNCTION__, reg, val);
 	iowrite32(val, priv->regs + reg);
 }
 
@@ -36,38 +36,47 @@ u32 axi_ad3552r_read(struct axi_ad3552r_priv *priv, u32 reg)
 }
 
 void axi_ad3552r_spi_write_8b(struct axi_ad3552r_priv *priv, u32 reg, u32 val, bool sdr_ddr_n)
-{
-	axi_ad3552r_write(priv, 0x80, (reg << 24) | (val << 16));
+{  u32 read_val;
+	axi_ad3552r_write(priv, 0x84, val << 16);
+	axi_ad3552r_write(priv, 0x8c, reg << 24);
+	pr_err("%s: 0x%x\n", __FUNCTION__, axi_ad3552r_read(priv, 0x84));
+	pr_err("%s: 0x%x\n", __FUNCTION__, axi_ad3552r_read(priv, 0x8c));
+	read_val = axi_ad3552r_read(priv, 0x8c);
+	pr_err("read value is : 0x%x\n", read_val);
 	if (sdr_ddr_n) {
 		axi_ad3552r_write(priv, 0x48, 0x14000);
-		axi_ad3552r_write(priv, 0x6c, 0x1);
+		axi_ad3552r_write(priv, 0x8c, read_val | 0x00000001);
 		mdelay(100);
-		axi_ad3552r_write(priv, 0x6c, 0x0);
+		axi_ad3552r_write(priv, 0x8c, read_val & 0xffff0000);
 	} else {
 		axi_ad3552r_write(priv, 0x48, 0x04000);
-		axi_ad3552r_write(priv, 0x6C, 0x1);
+		axi_ad3552r_write(priv, 0x8c, read_val | 0x00000001);
 		mdelay(100);
-		axi_ad3552r_write(priv, 0x6c, 0x0);
+		axi_ad3552r_write(priv, 0x8c, read_val & 0xffff0000);
 	}
 }
 
 void axi_ad3552r_spi_write_16b(struct axi_ad3552r_priv *priv, u32 reg, u32 val, bool sdr_ddr_n)
 {
-
-	axi_ad3552r_write(priv, 0x80, (reg << 24) | (val << 8));
+	u32 read_val;
+	axi_ad3552r_write(priv, 0x84, val << 8);
+	axi_ad3552r_write(priv, 0x8c, reg << 24);
+	pr_err("%s: 0x%x\n", __FUNCTION__, axi_ad3552r_read(priv, 0x84));
+	pr_err("%s: 0x%x\n", __FUNCTION__, axi_ad3552r_read(priv, 0x8c));
+	read_val = axi_ad3552r_read(priv, 0x8c);
+	pr_err("read value is : 0x%x\n", read_val);
 	if(sdr_ddr_n) {
 		axi_ad3552r_write(priv, 0x48, 0x10000);
-		axi_ad3552r_write(priv, 0x6C, 0x1);
+		axi_ad3552r_write(priv, 0x8c, read_val | 0x00000001);
 		mdelay(100);
-		axi_ad3552r_write(priv, 0x6c, 0x0);
+		axi_ad3552r_write(priv, 0x8c, read_val & 0xffff0000);
 	} else {
 		axi_ad3552r_write(priv, 0x48, 0x00000);
-		axi_ad3552r_write(priv, 0x6C, 0x1);
+		axi_ad3552r_write(priv, 0x8c, read_val | 0x1);
 		mdelay(100);
-		axi_ad3552r_write(priv, 0x6c, 0x0);
+		axi_ad3552r_write(priv, 0x8c, read_val & 0xffff0000);
 	}
 }
-
 static int axi_ad3552r_read_raw(struct iio_dev *indio_dev,
 			    struct iio_chan_spec const *chan,
 			    int *val,
@@ -89,10 +98,10 @@ static int axi_ad3552r_read_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_RAW:
 		if (chan->channel){
 			axi_ad3552r_spi_write_16b(priv, 0xac, 0x00, 1);
-			*val = axi_ad3552r_read(priv,0x84);
+			*val = axi_ad3552r_read(priv,0x80);
 		} else {
 			axi_ad3552r_spi_write_16b(priv, 0xaa, 0x00, 1);
-			*val = axi_ad3552r_read(priv,0x84);
+			*val = axi_ad3552r_read(priv,0x80);
 		}
 		return IIO_VAL_INT;
 	}
@@ -138,11 +147,7 @@ static int axi_ad3552r_reg_access(struct iio_dev *indio_dev,
 	return 0;
 }
 
-static const struct iio_info axi_ad3552r_info = {
-	.read_raw = &axi_ad3552r_read_raw,
-	.write_raw = &axi_ad3552r_write_raw,
-	.debugfs_reg_access = &axi_ad3552r_reg_access,
-};
+
 
 static const struct iio_chan_spec axi_ad3552r_channels[] = {
 	{
@@ -177,27 +182,76 @@ static const struct iio_chan_spec axi_ad3552r_channels[] = {
 	}
 };
 
-static int axi_ad3552r_buffer_preenable(struct iio_dev *indio_dev)
-{
-	struct axi_ad3552r_priv *priv = iio_priv(indio_dev);
 
-	// Start transfer ddr
-	axi_ad3552r_spi_write_8b(priv, 0x14, 0x05, 1);
+/*
+ * ad7298_update_scan_mode() setup the spi transfer buffer for the new scan mask
+ */
+static int axi_ad3552r_update_scan_mode(struct iio_dev *indio_dev,
+	const unsigned long *active_scan_mask)
+{  
+	struct axi_ad3552r_priv *priv = iio_priv(indio_dev);
+    pr_err("%s : %s \n", __FUNCTION__, indio_dev->name);
+	if(!test_bit(0, active_scan_mask) && test_bit(1, active_scan_mask)){
 	priv->ddr = true;
+	// Stream length
+	axi_ad3552r_spi_write_8b(priv, 0x0e, 0x02, 1);
 	mdelay(100);
-	axi_ad3552r_write(priv, 0x418, 0x02);
-	axi_ad3552r_write(priv, 0x458, 0x02);
+	// DDR configure
+	axi_ad3552r_spi_write_8b(priv, 0x14, 0x05, 1);
+	axi_ad3552r_write(priv, 0x8c, 0x2c000000);
+    pr_err("Just channel 1 is active\n");
+
+	} else if(test_bit(0, active_scan_mask) && !test_bit(1, active_scan_mask)) {
+	// Stream length
+	axi_ad3552r_spi_write_8b(priv, 0x0e, 0x02, 1);
+	mdelay(100);
+	// DDR configure
+	axi_ad3552r_spi_write_8b(priv, 0x14, 0x05, 1);
+	axi_ad3552r_write(priv, 0x8c, 0x2a000000);
+    pr_err("Just channel 0 is active\n");
+	} else {
+	// Stream length
+	axi_ad3552r_spi_write_8b(priv, 0x0e, 0x04, 1);
+	mdelay(100);
+	// DDR configure
+	axi_ad3552r_spi_write_8b(priv, 0x14, 0x05, 1);
+
+	axi_ad3552r_write(priv, 0x8c, 0x2c000000);
+    pr_err("Both channels are active\n");
+	}
+
+	return 0;
+}
+
+static const struct iio_info axi_ad3552r_info = {
+	.read_raw = &axi_ad3552r_read_raw,
+	.write_raw = &axi_ad3552r_write_raw,
+	.debugfs_reg_access = &axi_ad3552r_reg_access,
+	.update_scan_mode = axi_ad3552r_update_scan_mode,
+};
+
+
+static int axi_ad3552r_buffer_postenable(struct iio_dev *indio_dev)
+{   
+	u32 read_val;
+	struct axi_ad3552r_priv *priv = iio_priv(indio_dev);
+	pr_err("%s : %s \n", __FUNCTION__, indio_dev->name);
 	axi_ad3552r_write(priv, 0x48, 0x00010);
-	axi_ad3552r_write(priv, 0x80, 0x2c000000);
-	axi_ad3552r_write(priv, 0x6c, 0x03);
+    // Start stream transfer ddr 
+	read_val = axi_ad3552r_read(priv, 0x8c);
+	pr_err("%s: 0x%x\n", __FUNCTION__, read_val);
+	axi_ad3552r_write(priv, 0x8c, read_val | 0x00000003);
+	
 	return 0;
 }
 
 static int axi_ad3552r_buffer_postdisable(struct iio_dev *indio_dev)
 {	
   struct axi_ad3552r_priv *priv = iio_priv(indio_dev);
-    	
-	axi_ad3552r_write(priv, 0x6c, 0x00);
+    u32 read_val;	
+	read_val = axi_ad3552r_read(priv, 0x8c);
+	axi_ad3552r_write(priv, 0x8c, read_val && 0xffff0000);
+	pr_err("%s: 0x%x\n", __FUNCTION__, axi_ad3552r_read(priv, 0x8c));
 	axi_ad3552r_spi_write_8b(priv, 0x14, 0x04,0);
 	priv->ddr = false;
 	return 0;
@@ -210,7 +264,7 @@ static int axi_ad3552r_dma_buffer_submit(struct iio_dma_buffer_queue *queue,
 }
 
 static const struct iio_buffer_setup_ops axi_ad3552r_buffer_setup_ops = {
-	.preenable = axi_ad3552r_buffer_preenable,
+	.postenable  = axi_ad3552r_buffer_postenable,
 	.postdisable = axi_ad3552r_buffer_postdisable,
 };
 
@@ -264,13 +318,11 @@ static int axi_ad3552r_probe(struct platform_device *pdev)
 	// Stream mode enable
 	axi_ad3552r_spi_write_8b(priv, 0x0f, 0x84, 1);
 	mdelay(100);
-	// Stream length
-	axi_ad3552r_spi_write_8b(priv, 0x0e, 0x04, 1);
-	mdelay(100);
 	// Enable +-10V range
 	axi_ad3552r_spi_write_8b(priv, 0x19, 0x44, 1);
 	mdelay(100);
-
+	axi_ad3552r_write(priv, 0x418, 0x02);
+	axi_ad3552r_write(priv, 0x458, 0x02);
 	priv->enable = false;
 
 	indio_dev->name = pdev->dev.of_node->name;
