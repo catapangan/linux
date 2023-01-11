@@ -82,6 +82,11 @@ struct ad7768_power_mode_info {
 	unsigned int min_freq;
 };
 
+struct ad7768_datalines_info {
+	unsigned int len;
+	const unsigned int *values;
+};
+
 struct ad7768_state {
 	struct spi_device *spi;
 	struct mutex lock;
@@ -104,6 +109,25 @@ static const int ad7768_dec_rate[6] = {
 	32, 64, 128, 256, 512, 1024
 };
 
+static const unsigned int ad7768_available_datalines[] = {
+	1, 2, 8
+};
+
+static const unsigned int ad7768_4_available_datalines[] = {
+	1, 4
+};
+
+static const struct ad7768_datalines_info ad7768_datalines_tbl[] = {
+	[ID_AD7768] = {
+			.len = ARRAY_SIZE(ad7768_4_available_datalines),
+			.values = ad7768_available_datalines,
+
+	},
+	[ID_AD7768_4] = {
+			 .len = ARRAY_SIZE(ad7768_4_available_datalines),
+			 .values = ad7768_4_available_datalines,
+	},
+};
 
 static bool ad7768_has_axi_adc(struct device *dev)
 {
@@ -645,6 +669,19 @@ static void ad7768_clk_disable(void *data)
 	clk_disable_unprepare(clk);
 }
 
+static int ad7768_datalines_from_dt(const unsigned int *tbl, size_t len,
+				   unsigned int value)
+{
+	unsigned int i;
+
+	for (i = 0; i < len; i++) {
+		if (tbl[i] == value)
+			return i;
+	}
+
+	return -EINVAL;
+}
+
 static int ad7768_post_setup(struct iio_dev *indio_dev)
 {
 
@@ -765,10 +802,13 @@ static int ad7768_probe(struct spi_device *spi)
 
 	ret = of_property_read_u32(st->spi->dev.of_node, "adi,data-lines",
 				  &st->datalines);
-	if (ret < 0)
-		return ret;
-	if (!st->datalines)
-		return -EINVAL;
+	if (!ret) {
+		ret = ad7768_datalines_from_dt(ad7768_datalines_tbl[id].values,
+					       ad7768_datalines_tbl[id].len,
+					       st->datalines);
+		if (ret < 0)
+			return ret;
+	}
 
 	ad7768_set_power_modes_info(st);
 	st->power_mode = AD7768_FAST_MODE;
