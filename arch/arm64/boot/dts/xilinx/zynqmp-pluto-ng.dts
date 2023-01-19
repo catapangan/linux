@@ -60,6 +60,54 @@
 		#clock-cells = <0>;
 		clock-frequency = <150000000>;
 	};
+
+	lite_aclk: lite_aclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <100000000>;
+	};
+
+	video_aclk: video_aclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <120000000>;
+	};
+
+	dphy_clk_200M: dphy_clk_200M {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <200000000>;
+	};
+
+	m_axi_s2mm_aclk: m_axi_s2mm_aclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <250000000>;
+	};
+
+	ov5640_1_8V: regulator-vref {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-supply";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+	};
+
+	ov5640_2_8V: regulator-vref {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-supply";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator-always-on;
+	};
+
+	ov5640_1_5V: regulator-vref {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-supply";
+		regulator-min-microvolt = <1500000>;
+		regulator-max-microvolt = <1500000>;
+		regulator-always-on;
+	};
 };
 
 &psgtr {
@@ -247,6 +295,24 @@
 		compatible = "adi,ltc2945";
 		reg = <0x6a>;
 	};
+
+	ov5640: camera@3c {
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+		clocks = <&dphy_clk_200M>;
+		clock-names = "xclk";
+		DOVDD-supply = <&ov5640_1_8V>; /* 1.8V */
+		AVDD-supply = <&ov5640_2_8V>; /* 2.8V */
+		DVDD-supply = <&ov5640_1_5V>; /* 1.5V */
+
+		port {
+			ov5640_to_mipi_csi2: endpoint {
+				remote-endpoint = <&csiss_in>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+			};
+		};
+	};      
 
 	typec_pd: usb-pd@38 {
 		compatible = "ti,tps6598x";
@@ -569,6 +635,57 @@
 		axi_sysid_0: axi-sysid-0@85000000 {
 			compatible = "adi,axi-sysid-1.00.a";
 			reg = <0x85000000 0x10000>;
+		};
+
+		mipi_csi: mipi_csi@84A80000 {
+			compatible = "xlnx,mipi-csi2-rx-subsystem-5.1";
+			reg = <0x84A80000 0x2000>;
+			interrupts = <0 105 IRQ_TYPE_LEVEL_HIGH>;
+			xlnx,csi-pxl-format = <0x1f>;
+			xlnx,en-active-lines = <0x2>;
+			clocks = <&lite_aclk>, <&video_aclk>, <&dphy_clk_200M>;
+			clock-names = "lite_aclk", "video_aclk", "dphy_clk_200M";
+			video-reset-gpios = <&gpio 85 GPIO_ACTIVE_LOW>;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+					csiss_in: endpoint {
+						data-lanes = <1 2>;
+						remote-endpoint = <&ov5640_to_mipi_csi2>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					csiss_out: endpoint {
+						remote-endpoint = <&mipi_vdma>;
+					};
+				};
+			};
+		};
+
+		axi_vdma: axi_vdma@84A90000 {
+			compatible = "xlnx,axi-vdma-1.00.a";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			#dma_cells = <1>;
+			reg = <0x84A90000 0x10000>;
+			dma-ranges = <0x00000000 0x84A90000 0x000F4240>;
+			xlnx,num_fstores = <0x3>;
+			xlnx,flush-fsync = <0x3>;
+			xlnx,addrwidth = <0x20>;
+			clocks = <&lite_aclk>, <&m_axi_s2mm_aclk>, <&video_aclk>;
+			clock-names = "s_axi_lite_aclk","m_axi_s2mm_aclk","s_axis_s2mm_aclk";
+
+			mipi_vdma: dma-channel@84A90000 {
+				compatible = "xlnx,axi-vdma-s2mm-channel";
+				interrupts = <0 104 IRQ_TYPE_LEVEL_HIGH>;
+				xlnx,datawidth = <0x40>;
+			};
 		};
 	};
 
