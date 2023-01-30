@@ -172,11 +172,12 @@ static int ad9208_testmode_set(struct iio_dev *indio_dev, unsigned int chan,
 	struct ad9208_phy *phy = conv->phy;
 	int ret;
 
-	ad9208_adc_set_channel_select(&phy->ad9208, BIT(chan & 1));
+	//ad9208_adc_set_channel_select(&phy->ad9208, BIT(chan & 1));
+	ad9208_adc_set_channel_select(&phy->ad9208, chan, true);
 	/* FIXME: Add support for DDC testmodes */
 	ret = ad9208_register_write(&phy->ad9208, AD9208_REG_TEST_MODE, mode);
 	conv->testmode[chan] = mode;
-	ad9208_adc_set_channel_select(&phy->ad9208, AD9208_ADC_CH_ALL);
+	ad9208_adc_set_channel_select(&phy->ad9208, AD9208_ADC_CH_ALL, false);
 
 	return ret;
 }
@@ -776,7 +777,7 @@ static int ad9208_setup(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	ad9208_adc_set_channel_select(&phy->ad9208, AD9208_ADC_CH_ALL);
+	ad9208_adc_set_channel_select(&phy->ad9208, AD9208_ADC_CH_ALL, false);
 
 	ret = ad9208_set_pdn_pin_mode(&phy->ad9208, phy->powerdown_pin_en,
 				      phy->powerdown_mode);

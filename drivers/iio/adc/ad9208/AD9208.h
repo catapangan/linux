@@ -259,6 +259,8 @@ int ad9208_get_adc_clk_freq(ad9208_handle_t *h, uint64_t *adc_clk_freq_hz);
  *             For example
  *             ch =  AD9208_ADC_CH_NONE  ....No Channel selected
  *             ch =  AD9208_ADC_CH_A | AD9208_ADC_CH_B ... Channel A and Channel B Select
+ * \param unique_addressing In case of pair ADCs, set to true if only one ADC should be
+ * 							selected from the pair
  *
  *
  * \retval API_ERROR_OK API Completed Successfully
@@ -267,7 +269,7 @@ int ad9208_get_adc_clk_freq(ad9208_handle_t *h, uint64_t *adc_clk_freq_hz);
  * \retval API_ERROR_SPI_XFER SPI XFER Function Failed
  * \retval API_ERROR_INVALID_PARAM    Invalid Parameter
  */
-int ad9208_adc_set_channel_select(ad9208_handle_t *h, uint8_t ch);
+int ad9208_adc_set_channel_select(ad9208_handle_t *h, uint8_t ch, bool unique_addressing);
 
 /**
  * \brief Get AD9208 ADC Channel Select

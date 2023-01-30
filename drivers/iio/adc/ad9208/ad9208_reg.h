@@ -43,6 +43,7 @@ int ad9208_is_sync_spi_update_enabled(ad9208_handle_t *h, uint8_t *enabled);
 #define AD9208_PROD_ID_MSB_REG        0x005
 #define AD9208_CHIP_GRADE_REG         0x006
 #define AD9208_CH_INDEX_REG           0x008
+#define AD9208_CH_INDEX_REG_GLOBAL    0x009
 #define AD9208_CH_INDEX_SEL(x)        (((x)&0x3)<<0)
 #define AD9208_CHANNEL_PAGE_0         BIT(0)
 #define AD9208_CHANNEL_PAGE_1         BIT(1)

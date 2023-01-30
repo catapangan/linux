@@ -160,7 +160,7 @@ int ad9208_reset(ad9208_handle_t *h, uint8_t hw_reset)
 
 }
 
-int ad9208_adc_set_channel_select(ad9208_handle_t *h, uint8_t ch)
+int ad9208_adc_set_channel_select(ad9208_handle_t *h, uint8_t ch, bool unique_addressing)
 {
 	int err;
 
@@ -169,7 +169,13 @@ int ad9208_adc_set_channel_select(ad9208_handle_t *h, uint8_t ch)
 
 	if (ch > AD9208_ADC_CH_ALL)
 		return API_ERROR_INVALID_PARAM;
-	err = ad9208_register_write(h, AD9208_CH_INDEX_REG, ch);
+	if (!unique_addressing) {
+		err = ad9208_register_write(h, AD9208_CH_INDEX_REG_GLOBAL, AD9208_ADC_CH_ALL);
+		err |= ad9208_register_write(h, AD9208_CH_INDEX_REG, ch);
+	} else {
+		err = ad9208_register_write(h, AD9208_CH_INDEX_REG_GLOBAL, 1 + ((ch >> 1) & 1));
+		err |= ad9208_register_write(h, AD9208_CH_INDEX_REG, 1 + (ch & 1));
+	}
 	if (err != API_ERROR_OK)
 		return err;
 
