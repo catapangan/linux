@@ -49,8 +49,7 @@
 		sysref: clock@2 {
 			#clock-cells = <0>;
 			compatible = "adjustable-clock";
-			//clock-frequency = <5078125>;
-      clock-frequency = <1953125>;
+      		clock-frequency = <7812500>;
 			clock-accuracy = <1000000000>;
 			clock-output-names = "adc_sysref";
 		};
@@ -76,7 +75,7 @@
 				dma-channel@0 {
 					reg = <0>;
 					adi,source-bus-width = <128>;
-					adi,source-bus-type = <1>;
+					adi,source-bus-type = <2>;
 					adi,destination-bus-width = <128>;
 					adi,destination-bus-type = <0>;
 				};
@@ -99,9 +98,8 @@
 			clocks = <&zynqmp_clk 71>, <&device_clk>, <&axi_ad9694_adxcvr 0>;
 			clock-names = "s_axi_aclk", "device_clk", "lane_clk";
 
-			adi,octets-per-frame = <1>;
+			adi,octets-per-frame = <2>;
 			adi,frames-per-multiframe = <32>;
-			adi,subclass = <1>;
 
 			#clock-cells = <0>;
 			clock-output-names = "jesd_adc_lane_clk";
@@ -164,7 +162,7 @@
 
 		/* JESD204 parameters */
 
-		adi,octets-per-frame = <1>;
+		adi,octets-per-frame = <2>;
 		adi,frames-per-multiframe = <32>;
 		adi,converter-resolution = <16>;
 		adi,bits-per-sample = <16>;
@@ -172,6 +170,7 @@
 		adi,control-bits-per-sample = <0>;
 		adi,lanes-per-device = <4>;
 		adi,subclass = <1>;
+		adi,dual-link = <1>;
 
 		#address-cells = <1>;
 		#size-cells = <0>;
